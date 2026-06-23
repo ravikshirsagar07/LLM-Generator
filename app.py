@@ -1,51 +1,73 @@
 import streamlit as st
 from transformers import pipeline
 
+# Page Configuration
 st.set_page_config(
-    page_title="LLM Text Generator",
+    page_title="Local LLM Chatbot",
     page_icon="🤖",
-    layout="centered"
+    layout="wide"
 )
 
-st.title("🤖 LLM Text Generator")
-st.write(
-    "Enter a prompt below and let the language model generate text."
-)
+st.title("🤖 Local AI Assistant")
+st.write("Ask any question. Runs locally without API keys.")
 
-# Load model only once
+# Load Model
 @st.cache_resource
-def load_generator():
+def load_model():
     return pipeline(
-        "text-generation",
-        model="gpt2"
+        "text2text-generation",
+        model="google/flan-t5-large",
+        device_map="auto"
     )
 
-generator = load_generator()
+generator = load_model()
 
-prompt = st.text_area(
-    "Enter your prompt:",
-    value="Artificial Intelligence will transform education by"
-)
+# Chat History
+if "messages" not in st.session_state:
+    st.session_state.messages = []
 
-max_tokens = st.slider(
-    "Maximum new tokens",
-    min_value=20,
-    max_value=200,
-    value=80
-)
+# Display Chat History
+for msg in st.session_state.messages:
+    with st.chat_message(msg["role"]):
+        st.markdown(msg["content"])
 
-if st.button("Generate"):
-    if prompt.strip():
-        with st.spinner("Generating..."):
+# User Input
+prompt = st.chat_input("Ask a question...")
+
+if prompt:
+
+    st.session_state.messages.append(
+        {"role": "user", "content": prompt}
+    )
+
+    with st.chat_message("user"):
+        st.markdown(prompt)
+
+    with st.chat_message("assistant"):
+
+        with st.spinner("Thinking..."):
+
+            instruction = f"""
+            You are a helpful AI assistant.
+            Answer accurately and concisely.
+
+            Question: {prompt}
+
+            Answer:
+            """
+
             result = generator(
-                prompt,
-                max_new_tokens=max_tokens,
+                instruction,
+                max_length=512,
+                temperature=0.3,
                 do_sample=True,
-                temperature=0.8,
-                top_p=0.95
+                top_p=0.9
             )
 
-        st.subheader("Generated Text")
-        st.write(result[0]["generated_text"])
-    else:
-        st.warning("Please enter a prompt.")
+            answer = result[0]["generated_text"]
+
+            st.markdown(answer)
+
+    st.session_state.messages.append(
+        {"role": "assistant", "content": answer}
+    )
