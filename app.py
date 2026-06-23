@@ -1,40 +1,39 @@
 import streamlit as st
-from transformers import AutoTokenizer, AutoModelForSeq2SeqLM
+from transformers import AutoTokenizer, AutoModelForCausalLM
 import torch
 
-# Page Config
 st.set_page_config(
-    page_title="AI Assistant",
-    page_icon="🤖",
-    layout="centered"
+    page_title="Llama Chatbot",
+    page_icon="🦙",
+    layout="wide"
 )
 
-st.title("🤖 AI Assistant")
-st.write("Ask any question and get an AI-generated answer.")
+st.title("🦙 TinyLlama AI Assistant")
 
-# Load Model
 @st.cache_resource
 def load_model():
-    model_name = "google/flan-t5-small"
+    model_name = "TinyLlama/TinyLlama-1.1B-Chat-v1.0"
 
     tokenizer = AutoTokenizer.from_pretrained(model_name)
-    model = AutoModelForSeq2SeqLM.from_pretrained(model_name)
+
+    model = AutoModelForCausalLM.from_pretrained(
+        model_name,
+        torch_dtype=torch.float32,
+        device_map="cpu"
+    )
 
     return tokenizer, model
 
 tokenizer, model = load_model()
 
-# Chat History
 if "messages" not in st.session_state:
     st.session_state.messages = []
 
-# Display Previous Messages
-for message in st.session_state.messages:
-    with st.chat_message(message["role"]):
-        st.markdown(message["content"])
+for msg in st.session_state.messages:
+    with st.chat_message(msg["role"]):
+        st.markdown(msg["content"])
 
-# User Input
-prompt = st.chat_input("Ask a question...")
+prompt = st.chat_input("Ask anything...")
 
 if prompt:
 
@@ -49,31 +48,36 @@ if prompt:
 
         with st.spinner("Thinking..."):
 
-            try:
-                input_text = f"Answer this question: {prompt}"
+            formatted_prompt = f"""
+<|system|>
+You are a helpful AI assistant.
+<|user|>
+{prompt}
+<|assistant|>
+"""
 
-                inputs = tokenizer(
-                    input_text,
-                    return_tensors="pt",
-                    truncation=True,
-                    max_length=512
-                )
+            inputs = tokenizer(
+                formatted_prompt,
+                return_tensors="pt",
+                truncation=True,
+                max_length=1024
+            )
 
-                outputs = model.generate(
-                    **inputs,
-                    max_new_tokens=150,
-                    temperature=0.7,
-                    do_sample=True,
-                    top_p=0.9
-                )
+            outputs = model.generate(
+                **inputs,
+                max_new_tokens=200,
+                temperature=0.7,
+                top_p=0.9,
+                do_sample=True,
+                pad_token_id=tokenizer.eos_token_id
+            )
 
-                answer = tokenizer.decode(
-                    outputs[0],
-                    skip_special_tokens=True
-                )
+            response = tokenizer.decode(
+                outputs[0],
+                skip_special_tokens=True
+            )
 
-            except Exception as e:
-                answer = f"Error: {str(e)}"
+            answer = response.split("<|assistant|>")[-1].strip()
 
             st.markdown(answer)
 
