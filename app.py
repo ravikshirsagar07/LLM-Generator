@@ -1,35 +1,37 @@
 import streamlit as st
-from transformers import pipeline
+from transformers import AutoTokenizer, AutoModelForSeq2SeqLM
+import torch
 
-# Page Configuration
+# Page Config
 st.set_page_config(
-    page_title="Local LLM Chatbot",
+    page_title="AI Assistant",
     page_icon="🤖",
-    layout="wide"
+    layout="centered"
 )
 
-st.title("🤖 Local AI Assistant")
-st.write("Ask any question. Runs locally without API keys.")
+st.title("🤖 AI Assistant")
+st.write("Ask any question and get an AI-generated answer.")
 
 # Load Model
 @st.cache_resource
 def load_model():
-    return pipeline(
-        "text2text-generation",
-        model="google/flan-t5-large",
-        device_map="auto"
-    )
+    model_name = "google/flan-t5-small"
 
-generator = load_model()
+    tokenizer = AutoTokenizer.from_pretrained(model_name)
+    model = AutoModelForSeq2SeqLM.from_pretrained(model_name)
+
+    return tokenizer, model
+
+tokenizer, model = load_model()
 
 # Chat History
 if "messages" not in st.session_state:
     st.session_state.messages = []
 
-# Display Chat History
-for msg in st.session_state.messages:
-    with st.chat_message(msg["role"]):
-        st.markdown(msg["content"])
+# Display Previous Messages
+for message in st.session_state.messages:
+    with st.chat_message(message["role"]):
+        st.markdown(message["content"])
 
 # User Input
 prompt = st.chat_input("Ask a question...")
@@ -47,24 +49,31 @@ if prompt:
 
         with st.spinner("Thinking..."):
 
-            instruction = f"""
-            You are a helpful AI assistant.
-            Answer accurately and concisely.
+            try:
+                input_text = f"Answer this question: {prompt}"
 
-            Question: {prompt}
+                inputs = tokenizer(
+                    input_text,
+                    return_tensors="pt",
+                    truncation=True,
+                    max_length=512
+                )
 
-            Answer:
-            """
+                outputs = model.generate(
+                    **inputs,
+                    max_new_tokens=150,
+                    temperature=0.7,
+                    do_sample=True,
+                    top_p=0.9
+                )
 
-            result = generator(
-                instruction,
-                max_length=512,
-                temperature=0.3,
-                do_sample=True,
-                top_p=0.9
-            )
+                answer = tokenizer.decode(
+                    outputs[0],
+                    skip_special_tokens=True
+                )
 
-            answer = result[0]["generated_text"]
+            except Exception as e:
+                answer = f"Error: {str(e)}"
 
             st.markdown(answer)
 
